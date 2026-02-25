@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Figtree, Inter } from "next/font/google";
 import "./globals.css";
 import { SidebarNav } from "@/components/SidebarNav";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const figtree = Figtree({
+  variable: "--font-figtree",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -27,8 +29,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        style={{ display: "flex", minHeight: "100vh" }}
+        className={`${figtree.variable} ${inter.variable}`}
+        style={{ display: "flex", minHeight: "100vh", margin: 0 }}
       >
         <SidebarNav />
         <main
@@ -37,6 +39,7 @@ export default function RootLayout({
             minWidth: 0,
             display: "flex",
             flexDirection: "column",
+            backgroundColor: "var(--color-bg-base)",
           }}
         >
           {children}

@@ -1,0 +1,138 @@
+Lendsight Consumer — Task List
+Generated from: prd.txt + cd_module_spec.txt
+================================================================================
+
+MILESTONE 1 — Project Setup & App Shell
+--------------------------------------------------------------------------------
+[ ] 1.1  Scaffold Next.js App Router project (TypeScript, Tailwind CSS, ESLint)
+[ ] 1.2  Install dependencies: @supabase/supabase-js, @supabase/ssr, ai, @ai-sdk/anthropic (or openai), clsx, tailwind-merge, lucide-react
+[ ] 1.3  Configure environment variables (.env.local): NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, AI provider key
+[ ] 1.4  Set up Supabase client helpers (server + browser) using @supabase/ssr
+[ ] 1.5  Define Tailwind design tokens (colors, spacing, typography, radii) from Figma
+[ ] 1.6  Implement shared app shell layout (root layout.tsx): sidebar + main content area
+[ ] 1.7  Build SidebarNav component with all routes:
+           Debit: Savings (/savings), Certificate of Deposit (/cds), Checking (/checking), MMA (/mma)
+           Credit: Mortgages (/mortgages), Student Loans (/student-loans), Auto Loans (/auto-loans), Personal Loans (/personal-loans)
+           Active: /cds  |  Coming soon: all others
+[ ] 1.8  Build reusable ComingSoon placeholder page (title, description, optional CTA)
+[ ] 1.9  Create coming-soon routes: /savings, /checking, /mma, /mortgages, /student-loans, /auto-loans, /personal-loans
+[ ] 1.10 Add root redirect: / → /cds
+[ ] 1.11 Create shared utility pages: /about-data, /help, /settings, /privacy, /terms
+[ ] 1.12 Create /not-found (404) and /error (500) pages
+[ ] 1.13 Build PageHeader component (title + optional helper copy)
+
+MILESTONE 2 — Data Layer & Normalization
+--------------------------------------------------------------------------------
+[ ] 2.1  Implement server-side normalization parsers (lib/parsers.ts):
+           parsePercent(text) → number | null          ("1.25%" → 1.25)
+           parseMoney(text) → number | null             ("$0.00" → 0)
+           parseTermToMonths(text) → number | null      ("3 Month" → 3, "1 Year" → 12)
+           parseAmountTier(text) → {min, max|null}|null ("$10000 - $99999" → {min:10000, max:99999})
+           parsePenaltyToDOI(text) → {doiMin, doiMax, raw}  (month=30, year=365)
+[ ] 2.2  Implement closest-term matching logic (prefer exact; then closest abs diff; tie-breaker: shorter)
+[ ] 2.3  Implement amount tier selection logic (exact > narrowest range > highest APY)
+[ ] 2.4  Implement bank-level aggregation (APY range min/max, penalty DOI min/max per bank)
+[ ] 2.5  Implement all 4 sort functions for bank rows:
+           - Highest APY (max Standard APY desc)
+           - Best Relationship Rate (max Relationship APY desc)
+           - Shortest Withdrawal Penalty (doiMin asc; exclude unknown)
+           - Most Favorable Terms (|matchedTermMonths - requestedTermMonths| asc; tie: shorter term, then max APY)
+[ ] 2.6  Set up zip_lookup table in Supabase (zip → city, state) and implement helpers: zipToCity(), cityToZips()
+[ ] 2.7  Implement API route: GET /api/cd/product-types  (distinct Product Type; cache 24 h)
+[ ] 2.8  Implement API route: GET /api/cd/rows?zips=&productType=&termMonths=&amount=  (normalized branch rows)
+[ ] 2.9  Implement API route: GET /api/cd/banks?...  (aggregated bank rows using Milestone 2 logic)
+[ ] 2.10 Add caching layer for static lists (product types, terms)
+
+MILESTONE 3 — CD Module UI Components
+--------------------------------------------------------------------------------
+[ ] 3.1  Dropdown / Select component (CD Type, Term)
+[ ] 3.2  CurrencyInput component (Amount field; numeric, dollar-formatted)
+[ ] 3.3  Typeahead component (City/ZIP area selector; debounced)
+[ ] 3.4  MultiSelect component (ZIP picker; max 5; same-city constraint; inline validation)
+[ ] 3.5  SortDropdown component
+[ ] 3.6  SummaryCard component (label + value; used for Best APY and Lowest Penalty cards)
+[ ] 3.7  Table component (generic, sortable columns)
+[ ] 3.8  BankTableRow component (logo initials, APY range, Interest range, Relationship Rate, Penalty text, closest-term badge)
+[ ] 3.9  ClosestTermBadge component ("Closest term: X mo")
+[ ] 3.10 Tooltip component (range / penalty explanations)
+[ ] 3.11 Drawer component (slide-in panel)
+[ ] 3.12 BranchTable component (branch-level rows inside drawer: Branch, ZIP, APY, Interest, Relationship Rate, Penalty)
+[ ] 3.13 Skeleton loader components (SummaryCardSkeleton, TableSkeleton, DrawerSkeleton)
+[ ] 3.14 EmptyState component (no results; suggests filter changes)
+[ ] 3.15 ErrorState component (fetch failed)
+[ ] 3.16 Toast / InlineAlert component (ZIP validation errors, fetch errors)
+[ ] 3.17 AIInput component (text field + submit)
+[ ] 3.18 PromptChips component (suggested question chips for CD module)
+[ ] 3.19 AIResponseCard component (direct answer + top 3 + why bullets)
+
+MILESTONE 4 — CD Module Page Integration (/cds)
+--------------------------------------------------------------------------------
+[ ] 4.1  Create /cds page route and wire up CDPage server + client components
+[ ] 4.2  Load CD Type dropdown options from /api/cd/product-types on mount; apply 24 h cache
+[ ] 4.3  Load Term dropdown options from Supabase distinct Term values; sort by parsed months asc
+[ ] 4.4  Implement Area selector:
+           City-first mode: city selection resolves to ZIP list via zip_lookup
+           ZIP-first mode: multi-select up to 5 ZIPs constrained to same city
+[ ] 4.5  Wire all filter changes to trigger data refetch from /api/cd/banks (and /api/cd/rows)
+[ ] 4.6  Compute and display Summary Cards (Best APY, Lowest Penalty) from aggregated bank data
+[ ] 4.7  Render BankTable with sort control; default sort = Highest APY
+[ ] 4.8  Bank row click → open Branch Drawer; load branch rows via /api/cd/rows filtered to bank + territory
+[ ] 4.9  Display closest-term indicator per bank row when matched term ≠ requested term
+[ ] 4.10 Calculate and display maturity date (today + matchedTermMonths) per bank row
+[ ] 4.11 Handle loading state: skeleton loaders for cards + table on initial load and filter change
+[ ] 4.12 Handle empty state: no rows for current filter combination
+[ ] 4.13 Handle error state: Supabase fetch failure
+[ ] 4.14 Handle ZIP validation: >5 ZIPs selected, or ZIP from different city → prevent + show alert
+[ ] 4.15 Apply sensible filter defaults on page load
+
+MILESTONE 5 — AI Q&A Module
+--------------------------------------------------------------------------------
+[ ] 5.1  Define AI provider abstraction interface: aiClient.answerQuestion({ module, filters, rows, branchRows, question })
+[ ] 5.2  Implement AI context/prompt builder for CD module:
+           Includes current filters, bank-level aggregates, branch-level rows (same filter set)
+[ ] 5.3  Implement AI response parser to extract structured answer (direct answer, top 3, why bullets)
+[ ] 5.4  Add guardrails:
+           - Never invent APY/penalty values; say "Unknown" if missing/unparseable
+           - If question is about a different product, respond with redirect message
+[ ] 5.5  Implement AI API route: POST /api/ai/answer
+[ ] 5.6  Wire AIInput + PromptChips to /api/ai/answer on /cds page
+[ ] 5.7  Render AIResponseCard with structured answer; show "Thinking…" spinner during AI load
+[ ] 5.8  Gracefully disable AI Q&A when provider keys are not configured (hide input, show notice)
+[ ] 5.9  Define CD module suggested prompt chips (e.g., "Which bank has the highest APY?", "What's the lowest penalty here?")
+[ ] 5.10 Implement at least one AI provider adapter (Anthropic or OpenAI) via the abstraction
+
+MILESTONE 6 — Accessibility, Polish & QA
+--------------------------------------------------------------------------------
+[ ] 6.1  Keyboard navigation for all interactive controls (filters, table rows, drawer, AI input)
+[ ] 6.2  Visible focus states on all focusable elements
+[ ] 6.3  Color contrast compliance (WCAG AA minimum)
+[ ] 6.4  Responsive layout: desktop-first; acceptable on tablet
+[ ] 6.5  Verify all loading/empty/error states render correctly
+[ ] 6.6  Verify closest-term logic with edge cases (no matching term, multiple ties)
+[ ] 6.7  Verify amount tier selection with boundary values
+[ ] 6.8  Verify ZIP multi-select constraints (max 5, same-city rule)
+[ ] 6.9  Verify AI guardrails (no fabricated data, off-topic redirect)
+[ ] 6.10 Cross-browser smoke test (Chrome, Firefox, Safari)
+[ ] 6.11 Lint + type-check pass (eslint, tsc --noEmit)
+
+MILESTONE 7 — Deployment
+--------------------------------------------------------------------------------
+[ ] 7.1  Document all required environment variables in .env.example
+[ ] 7.2  Configure Vercel project (or alternative host); link to repository
+[ ] 7.3  Set environment variables in hosting platform
+[ ] 7.4  Deploy to production / preview URL
+[ ] 7.5  Verify live Supabase data connection (product types, CD rows load correctly)
+[ ] 7.6  Post-deploy smoke test: filter changes, table loads, drawer opens, AI answers
+[ ] 7.7  Set up zip_lookup data in Supabase (seed or import)
+
+================================================================================
+NOTES
+================================================================================
+- Data source: Supabase table public."Consumer-facing"
+- Server-side reads only (never expose service role key to client)
+- AI provider: abstraction in place; adapter TBD (Anthropic or OpenAI)
+- Component styling: follow Figma design tokens; Tailwind for layout glue
+- Logo images: show bank name initials until a logo mapping is provided
+- Penalty display: show raw text (e.g., "9 days of interest"); DOI used for sorting/ranking only
+- Term dropdown: display raw labels; order by parsed months ascending
+================================================================================

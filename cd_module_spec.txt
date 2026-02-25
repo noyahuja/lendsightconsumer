@@ -1,0 +1,406 @@
+CD Module Spec — Build Doc for Claude
+
+Scope: This file contains only the requirements needed to build the CD comparison experience
+(filters → bank table → branch drawer → AI Q&A) using Supabase table public."Consumer-facing"
+and your Figma-documented component library (design tokens + component specs).
+
+================================================================================
+1. Page + Layout
+================================================================================
+
+Purpose
+A comparison page for Certificates of Deposit (CDs) that lets users:
+- Pick CD inputs (type, term, amount, territory)
+- Compare banks side-by-side using normalized fields from Supabase (public."Consumer-facing")
+- Drill into a bank to see branch-level rates in a drawer
+- Ask AI questions that are answered using only the currently filtered CD dataset
+
+1.1 User Flows
+
+A) Arrive on CD page
+1. User lands on /cds from sidebar.
+2. Default filters are applied (CD Type / Term / Amount / Area).
+3. Page shows loading state for summary cards + results table.
+4. Results populate (bank rows) + summary cards.
+
+B) Change filters (CD Type, Term, Amount, Area)
+5. User changes a filter.
+6. System fetches relevant rows from Supabase (branch-level), normalizes values, and recalculates:
+   - closest-term matches
+   - tier selection by amount
+   - bank-level ranges
+7. UI updates table + summary cards.
+
+C) Area selection (City-first vs ZIP-first)
+
+City-first
+8.  User selects a city.
+9.  System resolves city → ZIP list (via zip_lookup).
+10. Results are fetched using that ZIP list.
+
+ZIP-first
+11. User selects a ZIP.
+12. System resolves ZIP → city (via zip_lookup).
+13. User may multi-select up to 5 ZIPs, constrained to that same city.
+14. Results are fetched using the selected ZIP list.
+
+D) Sort results
+15. User chooses a sort option.
+16. Table reorders deterministically (no data refetch required unless you choose server sorting).
+
+E) Drill into bank (drawer)
+17. User clicks a bank row.
+18. Drawer opens.
+19. Drawer displays branch-level rows for that bank within the selected territory.
+20. User closes drawer to return to bank table.
+
+F) Ask AI a question
+21. User enters a question (or clicks a prompt chip).
+22. System builds an AI context payload using only:
+    - current filters
+    - bank-level aggregates
+    - branch-level rows (same filter set)
+23. AI returns a short structured answer.
+
+G) No results
+24. User selects a combination of filters that yields no matching rows.
+25. UI shows an empty state with suggestions (change term, amount, product type, or territory).
+
+1.2 Data Displayed
+
+Header
+- Page title: "Compare CD Rates"
+- Optional helper copy (your Figma)
+
+Filters
+- CD Type (from distinct Product Type)
+- Term (from distinct Term values in Supabase)
+- Amount (requested)
+- Area (City or ZIP set)
+
+Summary cards (derived)
+- Best APY (highest max Standard APY among banks)
+- Lowest penalty (lowest DOI among banks; exclude unknown)
+
+Main results table (bank-level aggregates)
+Match the columns in your attached CD screen.
+Values are derived from public."Consumer-facing":
+- Bank name (Bank Name) + logo placeholder (initials until logos are linked)
+- APY = Standard APY range (min–max across branches)
+- Interest = Standard Interest Rate range (min–max across branches)
+- Relationship Rate = Relationship APY range (min–max across branches)
+- Withdrawal Penalty = display raw text from Withdrawal Penalty
+  (DOI is used for calculations/ranking only; see §4.1 parsePenaltyToDOI)
+- Closest-term indicator (per bank row only; shown when matched term != requested term)
+
+Bank drawer (branch-level rows)
+Per-branch fields (single values):
+- Branch (Branch)
+- ZIP (Zip)
+- APY = parsed Standard APY
+- Interest = parsed Standard Interest Rate
+- Relationship Rate = parsed Relationship APY
+- Term (matched)
+- Amount tier (Amount raw string + optional parsed min/max)
+- Withdrawal penalty (DOI from Withdrawal Penalty)
+- Optional (available in data; show only if you want in UI):
+  - Annual Fee (Annual Fee)
+  - Transfer Fee (Transfer Fee)
+  - Demographic group (Demographic group)
+
+AI answer panel
+AI response may reference:
+- bank-level rows
+- branch-level rows (even if drawer not open) when question is branch-granular
+
+1.3 Components Needed
+Use your Figma-documented components; names below are conceptual.
+
+Layout / Navigation
+- SidebarNav
+- PageHeader
+
+Inputs
+- Dropdown / Select (CD Type, Term)
+- CurrencyInput (Amount)
+- Typeahead (City/ZIP)
+- MultiSelect (ZIPs, max 5)
+- SortDropdown
+
+Results
+- Table (bank table)
+- TableRow (clickable)
+- Badge / Tag (closest-term indicator)
+- Tooltip (for ranges/penalty explanations)
+
+Drilldown
+- Drawer
+- Table (branch table inside drawer)
+
+AI
+- AIInput
+- PromptChips
+- AIResponseCard (structured answer)
+
+Feedback / States
+- Skeleton loaders (cards + table)
+- EmptyState
+- ErrorState
+- Toast / InlineAlert (for invalid ZIP selections, fetch errors)
+
+Implementation note: Components are documented in Figma (not Storybook). Claude should follow
+Figma component specs and tokens for styling and behavior.
+
+1.4 States
+
+Loading
+- Initial page load: skeleton for summary cards + bank table
+- Drawer load: skeleton for branch list
+- AI load: spinner + "Thinking…" state
+
+Empty
+- No matching rows for current filters
+
+Error
+- Supabase fetch error
+- zip_lookup missing/failed
+- AI provider not configured (graceful disable)
+
+Validation
+- ZIP multiselect > 5 → prevent selection + show message
+- ZIP from a different city than initial ZIP → prevent selection + show message
+
+Data quality
+- Unparseable penalty → show "Unknown" and exclude from Lowest Penalty card
+- Missing APY fields → exclude row from ranking or show "—" per design
+
+================================================================================
+2. Inputs (Filters)
+================================================================================
+
+2.1 CD Type (dropdown)
+- Populate dynamically from Supabase:
+  select distinct "Product Type" from public."Consumer-facing" order by 1
+- Cache list ~24h.
+- Display the raw DB string.
+
+2.2 Term (dropdown)
+- Populate dynamically from Supabase:
+  select distinct "Term" from public."Consumer-facing"
+- Parse each term into months for ordering and matching.
+- Order dropdown by parsed months ascending (recommended).
+- Display raw term labels exactly as stored.
+- Must support closest-term matching (see §4.2).
+
+2.3 Amount (currency input)
+- Numeric input A in dollars.
+- Used to choose correct tier row based on DB Amount string.
+
+2.4 Area selector (typeahead)
+User can start typing City or ZIP. Rules:
+- If first selection is City: city-mode. User does not add ZIPs.
+- If first selection is ZIP: ZIP-mode.
+  - User can multi-select up to 5 ZIPs.
+  - Additional ZIPs must be in the same city as the initial ZIP.
+
+Dependency: You need zip_lookup (zip → city/state) table OR a mapping service.
+- Recommended: zip_lookup table in Supabase.
+
+================================================================================
+3. Supabase Source of Truth
+================================================================================
+
+Table: public."Consumer-facing"
+
+Columns used (current CD MVP)
+- Bank Name
+- Branch (address string)
+- Zip
+- Product Type
+- Term
+- Amount
+- Relationship Interest Rate
+- Relationship APY
+- Standard Interest Rate
+- Standard APY
+- Annual Fee (optional)
+- Transfer Fee (optional)
+- Withdrawal Penalty
+- Demographic group (optional; keep available for AI)
+- id
+
+Example row:
+JP Morgan Chase | 595 Piedmont Ave NE | 30311 | Featured CD | 3 Month | $10000 - $99999 |
+1.24% | 1.25% | 1.24% | 1.25% | $0.00 | $0.00 | 9 days of interest | senior citizens | <uuid>
+
+================================================================================
+4. Normalization & Business Logic
+================================================================================
+
+4.1 Parsing utilities (server-side)
+Implement parsers that convert text fields into typed values:
+
+parsePercent(text) → number | null
+  "1.25%" → 1.25
+
+parseMoney(text) → number | null
+  "$0.00" → 0
+
+parseTermToMonths(text) → number | null
+  "3 Month"  → 3
+  "12 Month" → 12
+  "1 Year"   → 12
+
+parseAmountTier(text) → {min:number, max:number|null} | null
+  "$10000 - $99999" → {min:10000, max:99999}
+  "$25000+"         → {min:25000, max:null}
+
+parsePenaltyToDOI(text) → {doiMin:number|null, doiMax:number|null, raw:string}
+  "9 days of interest"   → {doiMin:9,  doiMax:9}
+  "3 months of interest" → {doiMin:90, doiMax:90}
+  "60–90 days"           → {doiMin:60, doiMax:90}
+  Conversion: month=30, year=365.
+
+4.2 Closest-term matching
+Given requested termMonthsReq:
+- For each bank (within territory ZIP set), compute available termMonths.
+- Prefer exact match; else choose closest by absolute diff.
+- Tie-breaker: shorter term.
+
+Indicator:
+- If not exact, show per bank row: Closest term: {matched} mo.
+
+4.3 Amount tier selection
+For input amount A, choose the row whose parsed amount tier contains A:
+- Range: min <= A <= max
+- Min+:  A >= min
+- Exact: A == value
+
+If multiple rows match, prefer:
+1. exact
+2. narrowest range
+3. highest APY
+
+4.4 Bank-level aggregation (main table)
+Main table is one row per bank for the selected territory.
+For each bank, using the matched term + selected amount tier:
+- Standard APY range    = min–max of selected tier Standard APY across branches
+- Relationship APY range = min–max across branches
+- Penalty DOI:
+  - compute doiMin/doiMax across branches
+  - show representative value = doiMin in main table
+
+4.5 Maturity date
+- maturityDate = today + matchedTermMonths
+- Display localized date.
+
+================================================================================
+5. Sorting
+================================================================================
+
+5.1 CD page sort control
+Sorting operates on the bank-level rows (aggregates).
+
+Sort options (CD):
+1. Highest APY (by max Standard APY) — default
+2. Best Relationship Rate (by max Relationship APY)
+3. Shortest Withdrawal Penalty (by penalty DOI min; exclude unknown)
+4. Most Favorable Terms
+   - Sort by closeness to requested term: |matchedTermMonths - requestedTermMonths| ascending
+   - Tie-breaker favors shorter matched term
+
+Tie-breakers (when primary metric ties):
+- max(Standard APY) desc
+- penalty DOI min asc
+
+================================================================================
+6. Results UI
+================================================================================
+
+6.1 Main table columns (bank row)
+Match your attached CD screen.
+- Bank name + logo placeholder (initials)
+- APY (Standard APY range)
+- Interest (Standard Interest Rate range)
+- Relationship Rate (Relationship APY range)
+- Withdrawal Penalty (raw text + DOI for logic; display per Figma)
+- Closest-term indicator (only when not exact)
+
+6.2 Row click → Branch drawer
+Clicking a bank row opens a drawer listing branches within the selected territory.
+
+Branch list (match table columns conceptually; single values):
+- Branch (address string from Branch)
+- ZIP (Zip)
+- APY (Standard APY)
+- Interest (Standard Interest Rate)
+- Relationship Rate (Relationship APY)
+- Withdrawal penalty (text + parsed DOI)
+
+Filtering inside drawer:
+- If ZIP-mode: only selected ZIPs.
+- If city-mode: all ZIPs in city.
+
+================================================================================
+7. Summary Cards
+================================================================================
+
+- Best APY: bank with highest max(Standard APY)
+- Lowest penalty: bank with lowest doiMin (exclude unknown)
+
+================================================================================
+8. AI Q&A
+================================================================================
+
+8.1 Context rules
+- AI must use only the current filtered dataset:
+  - bank-level aggregated rows
+  - plus underlying branch rows for the same filter set
+- AI can reference branches even if drawer not expanded when the user asks a
+  branch-granular question.
+
+8.2 Output format
+- Direct answer (1–2 sentences)
+- Top 3 recommendations (bank or branch)
+- Why (bullets)
+
+8.3 Guardrails
+- If user asks about mortgages while on CDs, respond with a redirect question.
+- Never invent APY/penalties; if missing/unparseable, say "Unknown".
+
+================================================================================
+9. Server Endpoints (suggested)
+================================================================================
+
+GET /api/cd/product-types
+  → distinct product types
+
+GET /api/cd/rows?zips=...&productType=...&termMonths=...&amount=...
+  → normalized branch rows
+
+GET /api/cd/banks?...
+  → aggregated bank rows (or aggregate server-side from /rows)
+
+================================================================================
+10. Acceptance Criteria
+================================================================================
+
+- Filters update results correctly.
+- CD Type list is sourced from Supabase distinct Product Type values.
+- Term list is sourced from Supabase distinct Term values.
+- Closest-term indicator appears per bank row when needed.
+- Main table shows ranges; branch drawer shows single values.
+- Withdrawal penalty is normalized into DOI for ranking/summary.
+- Bank logos show initials until a logo mapping is provided.
+- AI answers respect the dataset and can reference branch-level when asked.
+
+================================================================================
+11. Final Decisions
+================================================================================
+
+- Sort options: Highest APY, Best Relationship Rate, Shortest Withdrawal Penalty,
+  Most Favorable Terms.
+- Withdrawal penalty display: Show raw text as stored (e.g., "9 days of interest").
+  DOI is used for calculations only.
+- Term ordering: Sort term dropdown by parsed months (ascending) while displaying
+  raw labels.

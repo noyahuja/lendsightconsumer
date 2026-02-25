@@ -1,0 +1,216 @@
+Product Requirements Document (PRD)
+
+1. Overview
+Product name: Lendsight (working name)
+Purpose: A consumer-facing web app that lets users compare rates for debit and credit products (e.g., CDs, mortgages, savings). The app supports filtering, sorting, and an AI Q&A feature that answers questions using the currently selected product context and filtered dataset.
+Current status: Only one product module is live today. Other product sections should appear in the left nav but remain blank / "Coming soon" until implemented.
+Primary user outcome: Quickly compare competing financial product offers in a selected territory and make a decision based on user priorities (rate, fees, penalties, etc.), with optional AI help.
+
+2. Goals and Non-goals
+
+Goals (MVP)
+- Modular product framework: A scalable architecture where each product (CDs, Mortgages, etc.) is a self-contained module that plugs into a shared shell (nav, layout, AI).
+- Comparison workflow pattern: Consistent UX pattern across products: Inputs → sorting → results (table/cards) → optional drilldowns.
+- AI Q&A: A single AI box that answers questions about the current product using only the current filtered dataset.
+- High craft + design fidelity: Match Figma screens and your design system tokens/components.
+- Live deployment: Hosted app with a real data connection.
+
+Non-goals (MVP)
+- User accounts, saving, onboarding, personalization.
+- Full build of every product category at launch.
+- Complex financial advice or recommendations beyond presenting available data and user-selected priorities.
+
+3. Target Users
+- People rate-shopping for a specific financial product in a given geography.
+- People optimizing for a priority (highest rate, lowest cost/penalty, best flexibility).
+- Users who want quick explanations via AI.
+
+4. Product Scope & Modules
+
+Product shell (shared across all modules)
+- Left navigation
+- Page header + description
+- Filter/input region (module-specific inputs)
+- Sort control (module-specific sort keys)
+- Results region (table/cards)
+- Optional drilldown pattern (drawer/modal)
+- AI Q&A module
+
+Modules
+Each product module lives under its own route and implements:
+- Inputs schema
+- Sorting schema
+- Result row schema
+- Drilldown schema (optional)
+- Dataset builder (how data is fetched + normalized)
+
+Note: Detailed requirements for each product module should live in separate docs (e.g., "CD Module Spec — Claude Build Doc"). This PRD intentionally stays generic.
+
+5. Dashboard Pages & Routing
+This section lists all pages/routes needed in the dashboard, including which ones are active vs placeholders.
+
+5.1 App shell pages
+/ → Redirect to first active module (e.g., /cds) or show a lightweight landing state.
+/coming-soon (optional) → Reusable placeholder template.
+
+5.2 Product module pages (left nav)
+
+Debit products
+/savings → Coming soon
+/cds → Active module (implemented in separate CD module spec)
+/checking → Coming soon
+/mma → Coming soon
+
+Credit products
+/mortgages → Coming soon (mortgage module spec to be written)
+/student-loans → Coming soon
+/auto-loans → Coming soon
+/personal-loans → Coming soon
+
+5.3 Shared utility pages
+/about-data → Explains data freshness, sources, and definitions (no product-specific claims).
+/help → Basic help + FAQ (how sorting works, how AI works, etc.).
+
+5.4 System pages (recommended)
+/settings → Preferences (e.g., default location, display units, AI on/off if applicable).
+/privacy → Privacy policy page.
+/terms → Terms of service page.
+/404 (or framework default) → Not found.
+/500 (optional) → Generic error page.
+
+5.5 Placeholder behavior
+Clicking a "Coming soon" module shows a clean placeholder page using the same layout shell.
+Placeholder includes: title, short description, and (optional) CTA.
+
+6. Information Architecture & Navigation
+
+Left Nav (always visible):
+Debit Products
+  - Savings Account (Coming soon)
+  - Certificate of Deposit (Active module today)
+  - Checking Account (Coming soon)
+  - MMA (Coming soon)
+Credit Products
+  - Mortgages & Refinancing (Coming soon)
+  - Student Loans (Coming soon)
+  - Auto Loans (Coming soon)
+  - Personal Loans (Coming soon)
+
+Placeholder behavior:
+Clicking a "Coming soon" module shows a clean placeholder page.
+
+7. Cross-Module Functional Requirements
+
+6.1 Inputs & Filtering (generic)
+- Each module defines its own set of inputs (dropdowns, typeaheads, sliders, numeric fields).
+- Input changes refresh results.
+- Provide sensible defaults per module.
+
+6.2 Sorting (generic)
+- Each module defines allowable sort options.
+- Sorting updates results deterministically, with clear tie-breakers.
+
+6.3 Results (generic)
+- Results are shown as a comparison-friendly table or cards.
+- Rows represent the entity being compared (e.g., bank, lender, product offering) as defined by the module.
+
+6.4 Drilldowns (generic)
+- Modules may implement a drilldown to show more granular data.
+- Drilldown pattern: drawer (preferred), modal, or inline expansion — driven by Figma.
+
+6.5 AI Q&A (shared)
+
+UI:
+- One AI input box present in each module.
+- Optional suggested prompt chips per module.
+
+Behavior (hard constraints):
+- AI must answer using only the data provided at runtime for the current module and filters.
+- AI must not fabricate values.
+- If asked about a different product category than the one currently selected, AI should:
+  - Explain it is currently scoped to the active module
+  - Offer to switch modules (when implemented) or reframe the question
+
+Output format:
+- Direct answer (1–2 sentences)
+- Top items (e.g., top 3)
+- Why (bullets)
+- Call out missing/unknown fields clearly
+
+8. Data & Normalization (generic)
+
+7.1 Data source
+Live source is Supabase.
+
+7.2 Data access pattern
+- Prefer server-side reads (React route handlers / server actions) to avoid exposing privileged keys.
+- Implement a normalization layer that converts human-readable strings into typed fields for filtering/sorting.
+- Use caching where appropriate.
+
+7.3 Module datasets
+Each module defines:
+- What tables/views it queries
+- How it filters
+- How it aggregates
+- Which fields are required vs optional
+
+9. Design System & UI Implementation
+- UI source of truth is Figma documentation (design tokens + component specs).
+- Tailwind may be used for layout glue, but match spacing/typography/radii/colors from tokens.
+- Must honor accessibility patterns in the component specs.
+
+Accessibility baseline:
+- Keyboard nav for all controls
+- Visible focus states
+- Contrast compliant
+
+10. Technical Requirements
+
+9.1 Stack (recommended)
+- React
+- Tailwind CSS
+- Supabase
+- AI provider: TBD (implement provider abstraction)
+
+9.2 Architecture
+App shell
+  - Sidebar + routing + shared layout
+Modules
+  - One folder per product module
+Shared utilities
+  - Data fetching + normalization
+  - Sorting/filtering helpers
+  - AI prompt builder
+
+9.3 AI provider abstraction (TBD)
+- Define aiClient.answerQuestion({ module, filters, rows, details? }).
+- Implement adapters later (Anthropic/OpenAI/etc.).
+- If keys missing, disable AI gracefully.
+
+11. States & Quality
+- Loading state (skeletons)
+- Empty state (no results)
+- Error state (data fetch failed)
+- Responsive design (desktop-first, acceptable tablet)
+
+12. Analytics (Optional)
+Track:
+- Module visits
+- Filter changes
+- Sort changes
+- Drilldown opens
+- AI questions asked
+
+13. Release Plan
+
+MVP
+- App shell + navigation + placeholders
+- One active module (implemented via its separate module spec doc)
+- AI Q&A integrated (provider TBD, abstraction in place)
+- Deploy
+
+Next
+- Add additional modules following the same pattern
+
+14. Linked Module Specs
+- CD Module Spec — Claude Build Doc (separate file)
